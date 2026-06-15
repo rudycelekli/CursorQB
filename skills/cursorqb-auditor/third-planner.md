@@ -165,22 +165,42 @@ Detect:
 - wrong phase number in title;
 - mismatch between filename and H1 title.
 
-6. Content quality
-For each sub-plan, evaluate whether it is:
-- grounded in Main-Planing.md;
-- grounded in repository evidence where possible;
-- specific enough for Step 4 implementation-task decomposition;
-- not generic boilerplate;
-- not over-fragmented;
-- not too vague;
-- not trying to implement code;
-- not silently changing the master vision;
-- clear about what is in scope and out of scope;
-- clear about local readiness vs live readiness where relevant;
-- clear about security and operational boundaries where relevant;
-- clear about verification;
-- clear about acceptance criteria;
-- clear about dependencies and transition criteria.
+6. Content quality (objective scored rubric)
+Do not score with vague impressions like "grounded" or "not generic". Score each sub-plan
+against the measurable rubric below. The rubric is deterministic: re-running this audit on the
+same unchanged files MUST produce the same per-check results and the same overall verdict.
+
+For EACH sub-plan, record a pass/fail for every check (cite the exact evidence you used):
+
+- CQ1 — Measurable acceptance criteria: `## 8. Acceptance Criteria` contains at least TWO
+  criteria that are objectively verifiable (a command to run, a file that must exist, a
+  numeric threshold, or an explicit observable state). Count them. Fewer than two = fail.
+- CQ2 — Cited real file path: the sub-plan cites at least ONE concrete repository path
+  (file or directory) in `## 6. Current Repository Evidence` or `## 7. Planned Work Breakdown`
+  that ACTUALLY EXISTS in the repo. Verify existence (e.g. `ls`/`test -e`). If the sub-plan
+  legitimately has no repo evidence yet, it must say so explicitly AND CQ2 is marked
+  "n/a (greenfield)" rather than pass.
+- CQ3 — No vague-term denylist: the sub-plan does not lean on banned filler phrases as if they
+  were specifications. Denylist (case-insensitive): "as needed", "etc.", "and so on",
+  "various", "robust" (without a metric), "best practices" (without a named practice),
+  "improve performance" (without a number), "make it better", "some", "appropriate" (without
+  a defined criterion). Quoting such a phrase inside a fenced denylist example is allowed; using
+  it as the actual acceptance bar is a fail.
+- CQ4 — Scope clarity: `## 4. Scope` and `## 5. Out of Scope` are both non-empty and
+  non-contradictory.
+- CQ5 — Verification present: `## 9. Validation and Test Approach` names at least one concrete
+  validation command or explicitly marks proposed future commands as proposed.
+- CQ6 — Local vs live readiness: where the slice touches external systems, local readiness and
+  live readiness are distinguished (n/a if the slice is purely local).
+
+Also evaluate, as supporting (non-scored) observations: grounding in Main-Planing.md,
+over-fragmentation, code-in-plan, and silent vision changes.
+
+Verdict mapping for the per-file rubric:
+- A sub-plan with all applicable CQ1-CQ6 passing is "Substance PASS".
+- A sub-plan that passes structure but fails one or more CQ checks is "Structure PASS" only -
+  record each failed check as a fix in `## 13. Prioritized Fix List` (CQ1/CQ2 failures are at
+  least P1; others at least P2).
 
 7. Scope drift
 Detect whether Step 2 introduced:
@@ -250,10 +270,18 @@ Include:
 - most important finding
 - most important remediation action
 
-Status definitions:
-- PASS: Coverage and structure are complete; only minor wording issues exist.
-- PASS_WITH_WARNINGS: Step 2 output is mostly usable, but some issues should be fixed before Step 4.
-- BLOCKED: Missing main plan, missing index, missing sub-plan files, severe coverage gaps, or severe structure problems prevent reliable Step 4 decomposition.
+Status definitions (the verdict must never overclaim - say exactly what was checked):
+- PASS: Coverage and structure are complete AND every sub-plan reached "Substance PASS" on the
+  Section-6 rubric (CQ1-CQ6). Only minor wording issues remain.
+- PASS_WITH_WARNINGS: Step 2 output is usable, but at least one sub-plan is "Structure PASS"
+  only (structure is correct yet one or more rubric checks failed), or other non-blocking issues
+  exist. Each rubric failure must appear in the `## 13. Prioritized Fix List`.
+- BLOCKED: Missing main plan, missing index, missing sub-plan files, severe coverage gaps, severe
+  structure problems, or CQ1/CQ2 rubric failures that make reliable Step 4 decomposition unsafe.
+
+The word "PASS" alone in this audit means "Structure PASS" unless every sub-plan also reached
+"Substance PASS" via the Section-6 rubric. Do not report a clean PASS while rubric checks are
+failing - downgrade to PASS_WITH_WARNINGS (or BLOCKED) and list the failing checks.
 
 ## 2. Inspected Sources
 

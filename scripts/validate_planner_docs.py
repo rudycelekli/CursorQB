@@ -95,9 +95,10 @@ AUDIT_HEADINGS = [
 FIX_LIST_HEADING = "## 13. Prioritized Fix List"
 
 FOLDER_RE = re.compile(r"^Faz-(\d+)-Plans$")
-SUBPLAN_RE = re.compile(r"^Faz(\d+)\.(\d+)-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+# Slugs accept mixed case (Faz1.1-Local-Contract.md as well as the lowercase form).
+SUBPLAN_RE = re.compile(r"^Faz(\d+)\.(\d+)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\.md$")
 INDEX_REF_RE = re.compile(
-    r"(?:\./)?(?:Planner-docs/)?Faz-\d+-Plans/Faz\d+\.\d+-[a-z0-9]+(?:-[a-z0-9]+)*\.md"
+    r"(?:\./)?(?:Planner-docs/)?Faz-\d+-Plans/Faz\d+\.\d+-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\.md"
 )
 MAIN_PHASE_RE = re.compile(r"\b(?:Faz|Phase)\s*-?\s*(\d+)\b", re.IGNORECASE)
 ROADMAP_HEADING = "## 6. Phased Master Roadmap"
@@ -109,6 +110,35 @@ AUDIT_FIX_RE = re.compile(
     r"^\s*(?:[-*]\s*)?\|?\s*(AUDIT-FIX-\d+)\s*(?:\||:|\u2014|\u2013|-)\s*(P0|P1|P2|P3)\b",
     re.MULTILINE,
 )
+
+# Directories that never carry hand-written plan or source content worth scanning.
+# Skipping them keeps the secret scan fast and avoids vendored false positives.
+SECRET_SCAN_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        ".venv",
+        "venv",
+        "env",
+        "dist",
+        "build",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".idea",
+        ".cache",
+        "target",
+        "vendor",
+    }
+)
+
+# Skip files larger than this in the secret scan. Real credentials live in small
+# config/source files; multi-megabyte files are almost always data/assets and reading
+# them fully would waste time and memory on large repos.
+SECRET_SCAN_MAX_FILE_BYTES = 2 * 1024 * 1024
 
 SECRET_PATTERNS = [
     ("openai_api_key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
@@ -127,6 +157,19 @@ PLACEHOLDER_PATTERNS = [
     ("angle_placeholder", re.compile(r"<(?:TODO|TBD|PLACEHOLDER)[^>]*>", re.IGNORECASE)),
     ("brace_placeholder", re.compile(r"\{\{[^{}]*(?:TODO|TBD|PLACEHOLDER)[^{}]*\}\}", re.IGNORECASE)),
 ]
+
+# Deterministic substance checks for ## 8. Acceptance Criteria (audit rubric CQ1/CQ3).
+# These give the audit machine-checkable teeth instead of relying on the LLM to self-grade.
+ACCEPTANCE_CRITERIA_HEADING = "## 8. Acceptance Criteria"
+MIN_ACCEPTANCE_CRITERIA = 2
+BULLET_RE = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+\S", re.MULTILINE)
+# Vague filler that signals an unmeasurable criterion. Scoped to the acceptance-criteria
+# section so precise prose elsewhere is never penalized.
+VAGUE_ACCEPTANCE_TERMS = re.compile(
+    r"\b(?:etc\.?|and so on|as needed|as appropriate|appropriately|properly|robust|"
+    r"user-friendly|seamless|various|scalable|flexible|efficient(?:ly)?)\b",
+    re.IGNORECASE,
+)
 
 REPEATED_SENTENCE_MIN_COUNT = 5
 REPEATED_SENTENCE_MIN_LENGTH = 80
@@ -221,13 +264,29 @@ def extract_main_phase_numbers(text: str) -> list[int]:
     return []
 
 
+def natural_phase_sorted(paths: list[Path]) -> list[Path]:
+    """Sort phase folders by their numeric phase so Faz-10 follows Faz-2, not Faz-1.
+
+    Paths that do not encode a phase number are sorted lexically and placed last so
+    ordering stays deterministic regardless of filesystem iteration order.
+    """
+
+    def key(path: Path) -> tuple[int, int, str]:
+        match = FOLDER_RE.match(path.name)
+        if match:
+            return (0, int(match.group(1)), path.name)
+        return (1, 0, path.name)
+
+    return sorted(paths, key=key)
+
+
 def collect_phase_folders(state: ValidationState) -> dict[int, Path]:
     folders: dict[int, Path] = {}
     if not state.planner_docs.exists():
         state.error("missing_directory=Planner-docs")
         return folders
 
-    for folder in sorted(state.planner_docs.glob("Faz-*-Plans")):
+    for folder in natural_phase_sorted(list(state.planner_docs.glob("Faz-*-Plans"))):
         if not folder.is_dir():
             continue
         match = FOLDER_RE.match(folder.name)
@@ -241,14 +300,26 @@ def collect_phase_folders(state: ValidationState) -> dict[int, Path]:
     return folders
 
 
+def natural_subplan_sorted(paths: list[Path]) -> list[Path]:
+    """Sort sub-plan files by (phase, sub-phase) so Faz1.10 follows Faz1.2, not Faz1.1."""
+
+    def key(path: Path) -> tuple[int, int, int, str]:
+        match = SUBPLAN_RE.match(path.name)
+        if match:
+            return (0, int(match.group(1)), int(match.group(2)), path.name)
+        return (1, 0, 0, path.name)
+
+    return sorted(paths, key=key)
+
+
 def collect_subplans(state: ValidationState) -> list[tuple[int | None, int | None, Path]]:
     result: list[tuple[int | None, int | None, Path]] = []
-    for folder in sorted(state.planner_docs.glob("Faz-*-Plans")):
+    for folder in natural_phase_sorted(list(state.planner_docs.glob("Faz-*-Plans"))):
         if not folder.is_dir():
             continue
         folder_match = FOLDER_RE.match(folder.name)
         folder_phase = int(folder_match.group(1)) if folder_match else None
-        for path in sorted(folder.glob("*.md")):
+        for path in natural_subplan_sorted(list(folder.glob("*.md"))):
             match = SUBPLAN_RE.match(path.name)
             if not match:
                 state.error(f"invalid_subplan_filename={state.rel(path)}")
@@ -381,6 +452,14 @@ def validate_subplan_structure(
             if pattern.search(body):
                 state.warning(f"placeholder_text={state.rel(path)}::{required}::pattern={pattern_name}")
 
+    if ACCEPTANCE_CRITERIA_HEADING in text:
+        acceptance_body = section_body(text, ACCEPTANCE_CRITERIA_HEADING)
+        bullet_count = len(BULLET_RE.findall(acceptance_body))
+        if bullet_count < MIN_ACCEPTANCE_CRITERIA:
+            state.error(f"too_few_acceptance_criteria={state.rel(path)}::count={bullet_count}")
+        for match in VAGUE_ACCEPTANCE_TERMS.finditer(acceptance_body):
+            state.warning(f"vague_acceptance_term={state.rel(path)}::term={match.group(0).lower()}")
+
     for heading in ("## 3. Description", "## 7. Planned Work Breakdown"):
         body = normalized_body(section_body(text, heading))
         if len(body) >= 160:
@@ -474,7 +553,7 @@ def extract_audit_status(text: str) -> str | None:
         return match.group(1).upper()
 
     for line in text.splitlines():
-        stripped = line.strip(" -*`|:")
+        stripped = line.strip(" -*`|:").upper()
         if stripped in {"PASS", "PASS_WITH_WARNINGS", "BLOCKED"}:
             return stripped
     return None
@@ -517,12 +596,21 @@ def validate_step4_readiness(state: ValidationState) -> None:
 
 
 def scan_secrets(state: ValidationState) -> None:
+    """Scan the actual source files Step 4 may touch, not just Planner-docs/.
+
+    A leaked credential is just as dangerous in a real source file as in a plan,
+    so the scan walks the whole project root (skipping vendored/build dirs) and
+    hard-stops on any hit.
+    """
     secret_findings = 0
-    root = state.planner_docs if state.planner_docs.exists() else state.root
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or ".git" in path.parts:
+    for path in sorted(state.root.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(part in SECRET_SCAN_SKIP_DIRS for part in path.parts):
             continue
         try:
+            if path.stat().st_size > SECRET_SCAN_MAX_FILE_BYTES:
+                continue
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue

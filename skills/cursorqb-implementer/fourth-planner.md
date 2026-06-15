@@ -36,13 +36,33 @@ in-context contract; behavior is identical.
 - Select ONE `READY` or `READY_WITH_WARNINGS` sub-plan from the audit's `## 12. Step 4 Readiness Assessment` table (the first/highest-priority one unless the user names a different one).
 - Load only the selected sub-plan and the repo files needed for that one slice. Do not load all sub-plans.
 
+## Transactional safety (snapshot + auto-revert)
+
+Each slice is a transaction. A failed slice must never leave a half-edited tree.
+
+1. **Refuse a dirty tree.** Run `git status --porcelain`. If there are pre-existing changes
+   outside `Planner-docs/`, stop and ask the user to commit or stash first. Do not auto-stash
+   or fold the slice into unrelated work.
+2. **Snapshot the baseline before the first edit.** Record a recoverable restore point -
+   `git rev-parse HEAD` plus `git stash create`, or a scratch `git worktree`. If the
+   workspace is not a git repo, record the exact files you will edit and keep their original
+   contents so you can restore them verbatim.
+3. **Auto-revert on validation failure.** If the validation/test command fails mid-slice and
+   a minimal follow-up cannot make it green, restore **only the files this slice edited** to
+   the snapshot. Restore from the recorded baseline, not the index, so staged changes do not
+   leak through: `git restore --source=<baseline-ref> <edited-files>` or
+   `git checkout <baseline-ref> -- <edited-files>` (where `<baseline-ref>` is the snapshot from
+   step 2, e.g. `HEAD`). Then report the blocker. Never leave partially applied edits behind.
+4. **Scope reverts narrowly.** Revert only the slice's own files. Never run `git reset --hard`,
+   `git checkout .`, or `git clean` across the whole tree - that would destroy unrelated work.
+
 ## Slice procedure
 
-1. Read `git status`, `README.md`, `AGENTS.md`, `Makefile`, the audit, and the selected sub-plan.
+1. Read `git status`, `README.md`, `AGENTS.md`, `Makefile`, the audit, and the selected sub-plan. Apply the transactional gate above: refuse a dirty tree, then snapshot the baseline before any edit.
 2. Determine the validation/test command FIRST. Prefer existing repo commands (e.g. `make test`, `make smoke`, `make check`, a focused unit test) over invented ones. Write a failing test first when feasible (test-driven).
 3. Make the minimal, reversible change required by the slice.
 4. Run the focused tests plus the relevant `make` smoke/check target.
-5. Before claiming done, verify with fresh evidence (run the command and confirm output).
+5. Before claiming done, verify with fresh evidence (run the command and confirm output). If validation fails and cannot be made green, auto-revert the edited files to the snapshot before reporting.
 6. Report the result as an exact blocker or success. Separate code-delivery status from external config or credential blockers.
 
 ## Leverage installed skills (optional, with fallback)

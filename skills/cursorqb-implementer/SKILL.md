@@ -28,6 +28,27 @@ python3 <plugin-root>/scripts/validate_planner_docs.py --root . --mode step4
 - PASS, or PASS_WITH_WARNINGS with only P2/P3 -> proceed and keep the warnings visible.
 - `python3` unavailable -> read the audit's `## 1`, `## 12`, `## 13`, `## 15` sections and apply the same gate manually.
 
+## Transactional safety (snapshot + auto-revert, mandatory)
+
+Treat each slice as a transaction so a mid-slice failure never leaves a half-edited tree:
+
+1. **Refuse a dirty tree.** Run `git status --porcelain`. If it reports any pre-existing
+   changes outside `Planner-docs/`, stop and ask the user to commit or stash first - never
+   mix the slice with unrelated edits, and never auto-stash the user's work.
+2. **Snapshot the baseline before editing.** Record a restore point: prefer
+   `git stash create` / `git rev-parse HEAD` (or a scratch `git worktree`) so the exact
+   pre-slice state is recoverable. If the workspace is not a git repo, record the precise
+   list of files you are about to touch and their original contents before editing.
+3. **Auto-revert on failure.** If the validation/test command fails mid-slice and cannot be
+   made green with a minimal follow-up, revert **only the files this slice edited** back to
+   the snapshot. Restore from the recorded baseline, not the index, so staged changes do not
+   leak through: `git checkout <baseline-ref> -- <edited-files>` or
+   `git restore --source=<baseline-ref> <edited-files>` (where `<baseline-ref>` is the snapshot
+   from step 2, e.g. `HEAD`). Then report the blocker. Do not leave partially applied edits and
+   do not touch files outside the slice.
+4. **Never discard unrelated work.** Reverts are scoped to the files this slice changed; do
+   not run `git reset --hard`, `git checkout .`, or `git clean` on the whole tree.
+
 ## Token discipline
 
 - Read `Planner-docs/Sub-Planing-Audit.md` and `Planner-docs/Sub-Planing-Index.md` first.
@@ -36,11 +57,11 @@ python3 <plugin-root>/scripts/validate_planner_docs.py --root . --mode step4
 
 ## Slice procedure
 
-1. Read `git status`, `README.md`, `AGENTS.md`, `Makefile`, the audit, and the selected sub-plan.
+1. Read `git status`, `README.md`, `AGENTS.md`, `Makefile`, the audit, and the selected sub-plan. Apply the transactional gate above (refuse a dirty tree, then snapshot the baseline).
 2. Determine the validation/test command FIRST; prefer existing repo commands over invented ones; write a failing test first when feasible.
 3. Make the minimal, reversible change for the slice.
 4. Run the focused tests plus the relevant `make` smoke/check target.
-5. Verify with fresh evidence before claiming done.
+5. Verify with fresh evidence before claiming done. If validation fails and cannot be made green, auto-revert the edited files to the snapshot and report the blocker.
 6. Report an exact blocker or success; separate code-delivery status from external config/credential blockers.
 
 ## Leverage installed skills (optional, with fallback)

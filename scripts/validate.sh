@@ -25,6 +25,7 @@ required_files=(
   "commands/cursorqb-autopsy.md"
   "commands/cursorqb-audit.md"
   "commands/cursorqb-implement.md"
+  "commands/cursorqb-demo.md"
   "references/workflow-quality.md"
   "references/repo-aware-intake.md"
   "README.md"
@@ -33,6 +34,12 @@ required_files=(
   "docs/INSTALLATION.md"
   "docs/USAGE.md"
   "docs/MAINTAINING.md"
+  "examples/Planner-docs/Main-Planing.md"
+  "examples/Planner-docs/Sub-Planing-Index.md"
+  "examples/Planner-docs/Sub-Planing-Audit.md"
+  "examples/Planner-docs/Faz-1-Plans/Faz1.1-link-extraction-core.md"
+  "examples/Planner-docs/Faz-1-Plans/Faz1.2-relative-link-resolver.md"
+  "examples/Planner-docs/Faz-2-Plans/Faz2.1-http-checking-and-packaging.md"
 )
 
 for path in "${required_files[@]}"; do

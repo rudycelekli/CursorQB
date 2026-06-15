@@ -11,7 +11,7 @@ then ship it one safe slice at a time.
 
 <br>
 
-[![version](https://img.shields.io/badge/version-0.4.0-2563EB)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.5.0-2563EB)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-16A34A)](LICENSE)
 [![Cursor](https://img.shields.io/badge/Cursor-plugin-0F172A)](https://cursor.com)
 [![works with](https://img.shields.io/badge/works%20with-new%20%26%20existing%20repos-EA580C)](#what-youll-get)
@@ -47,6 +47,24 @@ It pauses for your explicit approval at every step. No CLI, no API key, no setup
 | **Quality-checked** | A built-in auditor plus a read-only validator catch missing sections, gaps, and scope drift before you build. |
 | **You stay in control** | An explicit approval gate sits between every step, and planning never touches your source code. |
 | **Speaks your language** | Questions are asked in whatever language you write in; the planning documents are written in English. |
+
+---
+
+## CursorQB vs built-in plan modes
+
+Cursor and Claude Code both have a "plan mode." They are great for **scoping a single change before you edit**. CursorQB solves a different problem: turning a **whole project** into a reviewed, versioned, build-ready plan that lives in your repo.
+
+| | Cursor plan mode | Claude Code plan mode | **CursorQB** |
+|---|---|---|---|
+| **Scope** | One change / session | One change / session | A whole project, phase by phase |
+| **Output** | Ephemeral chat plan | Ephemeral chat plan | Versioned files under `Planner-docs/` |
+| **Decomposition** | — | — | Master plan → phase sub-plans → coverage index |
+| **Quality gate** | Human eyeballs | Human eyeballs | Auditor + read-only validator (missing sections, gaps, scope drift) |
+| **Existing repos** | Reads context | Reads context | Dedicated repo autopsy + evidence-backed answers |
+| **Build step** | You drive | You drive | One audited, reversible slice at a time, behind an approval gate |
+| **Reviewable later** | No (chat scrolls away) | No (chat scrolls away) | Yes — plans are diffable, committable artifacts |
+
+Use plan mode when you're about to touch a few files. Reach for CursorQB when you need a durable, reviewable plan for the **whole thing** — and a safe way to execute it.
 
 ---
 
@@ -131,6 +149,10 @@ Planner-docs/
     └── Faz1.2-...md
 ```
 
+Want to see a finished one first? A complete, validator-passing example ships in
+[`examples/Planner-docs/`](examples/Planner-docs/), and `/cursorqb-demo` gives you a read-only,
+30-second tour of it without touching your repo.
+
 ---
 
 ## Commands
@@ -141,6 +163,7 @@ Planner-docs/
 | `/cursorqb-autopsy` | Analyze an existing repository only (Step 1.5). |
 | `/cursorqb-audit` | Re-run the quality audit only (Step 3). |
 | `/cursorqb-implement` | Implement one reviewed slice (Step 4, gated). |
+| `/cursorqb-demo` | Read-only dry-run tour of the bundled example — no edits to your repo. |
 
 ---
 
@@ -158,6 +181,11 @@ Planner-docs/
 
 - **Cursor** with plugin support.
 - **`python3`** *(optional)* — powers the bundled validator and tests, with a manual fallback when it is missing.
+
+> **Stays simple on purpose.** CursorQB installs with a single symlink and has **no runtime
+> dependencies** — no `requirements.txt`, no package install, no API key, no background service.
+> The only Python is the optional, read-only validator. Keeping the install to "link one folder"
+> is a deliberate invariant, not an accident.
 
 ---
 

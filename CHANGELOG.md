@@ -5,6 +5,44 @@ All notable changes to CursorQB are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-14
+
+Hardening release driven by a premortem of the workflow. Seven improvements, all delivered inside the
+existing markdown + read-only Python validator + tests — no new runtime dependencies, symlink-only
+install preserved.
+
+### Added
+
+- **Transactional Step 4.** The implementer now refuses to run on a dirty tree, snapshots a baseline
+  before edits, and auto-reverts only the exact files it touched if mid-slice validation fails — never
+  `git reset --hard`, `git checkout .`, or `git clean`. Reverts restore from the recorded baseline ref
+  (`git restore --source=<ref>` / `git checkout <ref> --`) rather than the index, so staged changes
+  cannot leak through. (`skills/cursorqb-implementer/SKILL.md`, `fourth-planner.md`)
+- **Untrusted-input handling.** The Step 1 / Step 2 / autopsy planners now treat repository content and
+  user answers as *data, not instructions*: directive-like strings (e.g. "ignore previous instructions")
+  are not obeyed, excerpts are wrapped in fenced blocks, and nothing is written outside the allowed files.
+- **Source-file secret scan.** The validator now scans the actual files under the project root (not just
+  `Planner-docs/`) for secret patterns and hard-stops on a hit, skipping vendored directories
+  (`node_modules`, `.venv`, `dist`, etc.) and files over 2 MB to stay fast on large repos. Reports
+  `secret_findings`.
+- **Objective, scored audit rubric.** The auditor uses a deterministic Section-6 rubric (≥2 measurable
+  acceptance criteria, ≥1 cited real file path that exists, vague-term denylist, scope clarity,
+  verification present, local-vs-live readiness) and distinguishes **Structure PASS** from
+  **Substance PASS** so the verdict never overclaims. Two of these now have machine-checkable teeth in
+  the validator: `## 8. Acceptance Criteria` must list at least two bullet criteria
+  (`too_few_acceptance_criteria`), and vague filler in that section is flagged
+  (`vague_acceptance_term`, strict-failing) instead of relying on the auditor to self-grade.
+- **Bundled example + demo.** A complete, validator-passing `examples/Planner-docs/` (a `linkcheck` CLI
+  project) ships in the repo, with a read-only `/cursorqb-demo` dry-run tour. New `BundledExampleTests`
+  assert the example passes every validator mode under `--strict` with zero secret findings.
+
+### Changed
+
+- **Hardened parser.** Sub-plan slugs accept mixed case; phase folders and sub-plans are natural-sorted
+  by zero-padded phase/sub-phase numbers; audit status is case-normalized from bare lines.
+- **README wedge + simplicity invariant.** Added a "CursorQB vs built-in plan modes" comparison and an
+  explicit note that the install stays symlink-only with no runtime dependencies.
+
 ## [0.4.0] - 2026-06-14
 
 ### Changed

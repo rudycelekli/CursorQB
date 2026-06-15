@@ -94,9 +94,45 @@ class SkillContentTests(unittest.TestCase):
             self.assertIn("superpowers", lowered)
             self.assertIn("review-security", lowered)
 
+    def test_planners_treat_ingested_content_as_untrusted_data(self) -> None:
+        # Red-team guard: every prompt that ingests repo content or user answers must frame
+        # that content as untrusted data, not instructions, to blunt prompt injection.
+        ingesting_prompts = [
+            SKILLS / "cursorqb-planner/planners/first-planner.md",
+            SKILLS / "cursorqb-subplanner/second-planner.md",
+            SKILLS / "cursorqb-autopsy/autopsy-planner.md",
+        ]
+        for path in ingesting_prompts:
+            lowered = read(path).lower()
+            self.assertIn("untrusted", lowered, path.name)
+            self.assertIn("data, not instructions", lowered, path.name)
+            self.assertIn("ignore previous instructions", lowered, path.name)
+
+    def test_implementer_step4_is_transactional(self) -> None:
+        impl = read(SKILLS / "cursorqb-implementer/SKILL.md")
+        fourth = read(SKILLS / "cursorqb-implementer/fourth-planner.md")
+        for text in (impl, fourth):
+            lowered = text.lower()
+            self.assertIn("git status --porcelain", lowered)
+            self.assertIn("snapshot", lowered)
+            self.assertIn("auto-revert", lowered)
+            # Must forbid whole-tree destructive reverts.
+            self.assertIn("git reset --hard", lowered)
+
     def test_auditor_fix_list_uses_single_line_severity_format(self) -> None:
         auditor = read(SKILLS / "cursorqb-auditor/SKILL.md")
         self.assertIn("AUDIT-FIX-NN | PX", auditor)
+
+    def test_auditor_uses_objective_scored_rubric(self) -> None:
+        third = read(SKILLS / "cursorqb-auditor/third-planner.md")
+        # Objective, deterministic rubric with measurable checks replaces vague prose.
+        self.assertIn("objective scored rubric", third.lower())
+        self.assertIn("deterministic", third.lower())
+        for check in ("CQ1", "CQ2", "CQ3"):
+            self.assertIn(check, third)
+        self.assertIn("Structure PASS", third)
+        self.assertIn("Substance PASS", third)
+        self.assertIn("vague-term denylist", third.lower())
 
     def test_no_codex_handoff_terms_in_components(self) -> None:
         # Cursor-native: no Codex "Follow the Goal" handoff and no $codexqb invocation.
